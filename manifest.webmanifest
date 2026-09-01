@@ -1,6 +1,6 @@
 {
-  "name": "ALFARUQ DATA SERVICE",
-  "short_name": "ALFARUQ",
+  "name": "Alfaruq data",
+  "short_name": "Alfaruq data",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#f4f6f5",
