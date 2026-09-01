@@ -7,8 +7,11 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // ---------- Global state ----------
 const state = {
   view: 'login',
+  history: [],
   user: null,
   name: 'there',
+  fullName: '',
+  phoneNumber: '',
   balance: 0,
   showBalance: true,
   notice: '',
@@ -22,7 +25,16 @@ const state = {
   ac: freshAc(),
   edu: freshEdu(),
   referralCode: null,
+  profileEdit: freshProfileEdit(),
+  pwChange: freshPasswordChange(),
 };
+
+function freshProfileEdit() {
+  return { fullName: '', phone: '', saving: false, notice: '' };
+}
+function freshPasswordChange() {
+  return { newPassword: '', confirmPassword: '', saving: false, notice: '' };
+}
 
 function freshDp() {
   return {
@@ -55,9 +67,37 @@ function freshElec() {
     amount: '', pin: '', submitting: false, notice: '', done: false,
   };
 }
+const NIGERIAN_BANKS = [
+  { name: 'Access Bank', code: '044' },
+  { name: 'Citibank Nigeria', code: '023' },
+  { name: 'Ecobank Nigeria', code: '050' },
+  { name: 'Fidelity Bank', code: '070' },
+  { name: 'First Bank of Nigeria', code: '011' },
+  { name: 'First City Monument Bank', code: '214' },
+  { name: 'Globus Bank', code: '00103' },
+  { name: 'Guaranty Trust Bank', code: '058' },
+  { name: 'Heritage Bank', code: '030' },
+  { name: 'Keystone Bank', code: '082' },
+  { name: 'Kuda Bank', code: '50211' },
+  { name: 'Moniepoint MFB', code: '50515' },
+  { name: 'Opay', code: '999992' },
+  { name: 'Palmpay', code: '999991' },
+  { name: 'Polaris Bank', code: '076' },
+  { name: 'Providus Bank', code: '101' },
+  { name: 'Stanbic IBTC Bank', code: '221' },
+  { name: 'Standard Chartered Bank', code: '068' },
+  { name: 'Sterling Bank', code: '232' },
+  { name: 'Union Bank of Nigeria', code: '032' },
+  { name: 'United Bank For Africa', code: '033' },
+  { name: 'Unity Bank', code: '215' },
+  { name: 'Wema Bank', code: '035' },
+  { name: 'Zenith Bank', code: '057' },
+];
+
 function freshWd() {
   return {
-    amount: '', bankName: '', accountNumber: '', accountName: '',
+    amount: '', bankCode: '', bankName: '', accountNumber: '', accountName: '',
+    verifying: false, verified: false,
     pin: '', submitting: false, notice: '', done: false,
   };
 }
@@ -165,9 +205,10 @@ async function loadProfile() {
   if (!state.user) return;
 
   const { data: profile } = await sb
-    .from('profiles').select('full_name, referral_code').eq('id', state.user.id).maybeSingle();
+    .from('profiles').select('full_name, phone, referral_code').eq('id', state.user.id).maybeSingle();
 
-  if (profile?.full_name) state.name = profile.full_name.split(' ')[0];
+  if (profile?.full_name) { state.name = profile.full_name.split(' ')[0]; state.fullName = profile.full_name; }
+  if (profile?.phone) state.phoneNumber = profile.phone;
   if (profile?.referral_code) state.referralCode = profile.referral_code;
 
   const { data: wallet } = await sb
@@ -416,667 +457,4 @@ function onPickDisco(value) {
 }
 async function verifyMeter() {
   setElec({ notice: '' });
-  const { selectedServiceId, selectedDisco, meterNo } = state.elec;
-  if (!selectedServiceId) return setElec({ notice: 'Choose your electricity provider (disco) first.' });
-  if (!meterNo || meterNo.length < 5) return setElec({ notice: 'Enter a valid meter number.' });
-
-  setElec({ verifying: true });
-
-  const { data, error } = await sb.functions.invoke('vtugate-verify-electricity', {
-    body: { service_id: selectedServiceId, meter_no: meterNo, disco: selectedDisco },
-  });
-
-  if (error || !data?.status || !data.data?.provider_status) {
-    return setElec({ verifying: false, notice: data?.message || 'Could not verify this meter number.' });
-  }
-
-  setElec({ verifying: false, verified: data.data });
-}
-async function submitElectricityPurchase() {
-  setElec({ notice: '' });
-  const { selectedServiceId, selectedDisco, meterNo, phone, amount, pin, verified } = state.elec;
-
-  if (!verified) return setElec({ notice: 'Verify your meter number first.' });
-  if (!phone || phone.length < 10) return setElec({ notice: 'Enter a valid phone number.' });
-  if (!amount || Number(amount) < 500) return setElec({ notice: 'Enter an amount (minimum ₦500).' });
-  if (!/^\d{4}$/.test(pin)) return setElec({ notice: 'Enter your 4-digit payment PIN.' });
-
-  setElec({ submitting: true });
-
-  const { data, error } = await sb.functions.invoke('vtugate-secure-buy-electricity', {
-    body: { service_id: selectedServiceId, meter_no: meterNo, disco: selectedDisco, amount: Number(amount), phone_number: phone, pin },
-  });
-
-  if (error || !data?.status) return setElec({ submitting: false, notice: data?.message || 'Electricity purchase failed.' });
-
-  state.balance = data.new_balance;
-  setElec({ submitting: false, done: true, verified: { ...verified, token: data.data?.token } });
-}
-function resetElecForm() { state.elec = freshElec(); }
-
-// ---------- Withdrawal ----------
-async function submitWithdrawal() {
-  setWd({ notice: '' });
-  const { amount, bankName, accountNumber, accountName, pin } = state.wd;
-
-  if (!amount || Number(amount) < 100) return setWd({ notice: 'Minimum withdrawal is ₦100.' });
-  if (!bankName || !accountNumber || !accountName) return setWd({ notice: 'Fill in all bank details.' });
-  if (!/^\d{4}$/.test(pin)) return setWd({ notice: 'Enter your 4-digit payment PIN.' });
-
-  setWd({ submitting: true });
-
-  const { data, error } = await sb.functions.invoke('wallet-request-withdrawal', {
-    body: { amount: Number(amount), bank_name: bankName, account_number: accountNumber, account_name: accountName, pin },
-  });
-
-  if (error || !data?.status) return setWd({ submitting: false, notice: data?.message || 'Withdrawal request failed.' });
-
-  state.balance = data.new_balance;
-  setWd({ submitting: false, done: true });
-}
-function resetWdForm() { state.wd = freshWd(); }
-
-// ---------- Airtime to Cash (manual review request) ----------
-async function submitAirtimeCash() {
-  setAc({ notice: '' });
-  const { network, amount, senderNumber } = state.ac;
-
-  if (!network) return setAc({ notice: 'Select the network.' });
-  if (!amount || Number(amount) < 100) return setAc({ notice: 'Enter a valid amount.' });
-  if (!senderNumber || senderNumber.length < 10) return setAc({ notice: 'Enter the phone number you sent airtime from.' });
-
-  setAc({ submitting: true });
-
-  const { error } = await sb.from('airtime_cash_requests').insert({
-    user_id: state.user.id, network, amount: Number(amount), sender_number: senderNumber, status: 'pending',
-  });
-
-  if (error) return setAc({ submitting: false, notice: 'Could not submit request. Please try again.' });
-
-  setAc({ submitting: false, done: true });
-}
-function resetAcForm() { state.ac = freshAc(); }
-
-// ---------- Education PIN flow ----------
-async function loadEduTypes() {
-  setEdu({ loadingTypes: true });
-  const list = await fetchServiceList('education');
-  if (!list) return setEdu({ loadingTypes: false, notice: 'Could not load education types.' });
-  setEdu({ types: list, loadingTypes: false });
-}
-async function onPickEduType(value) {
-  const match = state.edu.types.find((n) => n.network_name?.toLowerCase() === value.toLowerCase());
-  setEdu({ selectedType: value, selectedServiceId: match ? match.service_id : null, unitPrice: null });
-  if (!match) return;
-
-  setEdu({ loadingPrice: true });
-  const { data, error } = await sb.functions.invoke('vtugate-education-price', { body: { service_id: match.service_id } });
-
-  if (error || !data?.status) return setEdu({ loadingPrice: false, notice: 'Could not load price for this PIN.' });
-
-  const price = Number(data.data?.price ?? data.price ?? 0);
-  setEdu({ loadingPrice: false, unitPrice: price, notice: '' });
-}
-async function submitEduPurchase() {
-  setEdu({ notice: '' });
-  const { selectedServiceId, selectedType, unitPrice, quantity, phone, pin } = state.edu;
-
-  if (!selectedServiceId) return setEdu({ notice: 'Select an exam type.' });
-  if (!unitPrice) return setEdu({ notice: 'Price not loaded yet, please wait.' });
-  if (!quantity || Number(quantity) < 1) return setEdu({ notice: 'Enter a valid quantity.' });
-  if (!phone || phone.length < 10) return setEdu({ notice: 'Enter a valid phone number.' });
-  if (!/^\d{4}$/.test(pin)) return setEdu({ notice: 'Enter your 4-digit payment PIN.' });
-
-  setEdu({ submitting: true });
-
-  const totalAmount = unitPrice * Number(quantity);
-
-  const { data, error } = await sb.functions.invoke('vtugate-secure-buy-education', {
-    body: {
-      service_id: selectedServiceId, phone, quantity: Number(quantity),
-      product_code: selectedType.toLowerCase(), amount: totalAmount, pin,
-    },
-  });
-
-  if (error || !data?.status) return setEdu({ submitting: false, notice: data?.message || 'Education PIN purchase failed.' });
-
-  state.balance = data.new_balance;
-  setEdu({ submitting: false, done: true });
-}
-function resetEduForm() { state.edu = freshEdu(); }
-
-// ---------- Fund wallet (Paystack) ----------
-async function startFunding(amount) {
-  if (!state.user || !amount || Number(amount) <= 0) return setState({ notice: 'Enter a valid amount.' });
-
-  setState({ loading: true });
-
-  const { data, error } = await sb.functions.invoke('paystack-payment', {
-    body: { email: state.user.email, amount: Number(amount) },
-  });
-
-  setState({ loading: false });
-
-  if (error || !data?.success) return setState({ notice: data?.message || 'Could not start payment.' });
-
-  window.open(data.authorization_url, '_blank');
-  setState({ notice: 'Complete your payment in the new tab, then come back and tap "Refresh balance".' });
-}
-
-// ---------- Navigation ----------
-function go(view) {
-  if (view === 'data') { resetDataForm(); loadNetworks(); }
-  if (view === 'airtime') { resetAirtimeForm(); loadAtNetworks(); }
-  if (view === 'tv') { resetTvForm(); loadTvProviders(); }
-  if (view === 'electricity') { resetElecForm(); loadDiscos(); }
-  if (view === 'withdrawal') { resetWdForm(); }
-  if (view === 'airtime-cash') { resetAcForm(); }
-  if (view === 'edu-pin') { resetEduForm(); loadEduTypes(); }
-
-  setState({ view, notice: '' });
-  window.scrollTo(0, 0);
-}
-
-// ---------- Rendering ----------
-function render() {
-  if (state.loading && !state.user) {
-    root.innerHTML = `<div class="boot">Loading ALFARUQ DATA SERVICE…</div>`;
-    return;
-  }
-
-  if (!state.user) { root.innerHTML = renderAuth(); bindAuthEvents(); return; }
-
-  root.innerHTML = `
-    <header class="topbar">
-      <button class="icon-btn" data-nav="home">${icon('menu', 22)}</button>
-      ${logoHTML(true)}
-      <div class="avatar">${icon('user', 18)}</div>
-    </header>
-    <main class="content">${renderView()}</main>
-    <nav class="bottom-nav">
-      ${navItem('home', 'gauge', 'Home')}
-      ${navItem('history', 'history', 'History')}
-      ${navItem('profile', 'user', 'Profile')}
-      ${navItem('services', 'menu', 'More')}
-    </nav>
-  `;
-
-  bindGlobalEvents();
-  bindViewEvents();
-}
-
-function navItem(view, ic, label) {
-  const active = state.view === view;
-  return `<button class="nav-item ${active ? 'active' : ''}" data-nav="${view}">${icon(ic, 20)}<span>${label}</span></button>`;
-}
-
-function renderAuth() {
-  const v = state.view;
-  const title = v === 'login' ? 'Welcome Back' : v === 'register' ? 'Create Account' : 'Reset Password';
-  const sub = v === 'login' ? 'Login to your ALFARUQ account' : v === 'register' ? 'Join ALFARUQ DATA SERVICE' : 'Enter your email to receive reset instructions';
-
-  return `
-  <div class="auth-page">
-    <div class="auth-card">
-      ${logoHTML(false)}
-      <div class="auth-copy"><h1>${title}</h1><p>${sub}</p></div>
-      ${v === 'register' ? `
-        <label class="field"><span>Full name</span><div>${icon('user', 18)}<input id="fullName" type="text" placeholder="Full name" /></div></label>
-        <label class="field"><span>Phone number</span><div>${icon('phone', 18)}<input id="phone" type="tel" placeholder="Phone number" /></div></label>
-      ` : ''}
-      <label class="field"><span>Email address</span><div>${icon('user', 18)}<input id="email" type="email" placeholder="Email address" /></div></label>
-      ${v !== 'forgot' ? `<label class="field"><span>Password</span><div>${icon('shield', 18)}<input id="password" type="password" placeholder="Password" /></div></label>` : ''}
-      ${v === 'register' ? `<label class="field"><span>Confirm password</span><div>${icon('shield', 18)}<input id="confirmPassword" type="password" placeholder="Confirm password" /></div></label>` : ''}
-      ${state.notice ? `<div class="notice">${state.notice}</div>` : ''}
-      <button class="primary wide" id="authSubmit">${v === 'login' ? 'Login' : v === 'register' ? 'Create Account' : 'Send Reset Email'}</button>
-      ${v === 'login' ? `<button class="link-btn" data-authview="forgot">Forgot password?</button>` : ''}
-      <div class="switch">
-        ${v === 'login' ? `Don't have an account? <button data-authview="register">Sign Up</button>` : `Already have an account? <button data-authview="login">Login</button>`}
-      </div>
-      <p class="legal">Secure account access. Financial operations are only activated after real provider verification.</p>
-    </div>
-  </div>`;
-}
-
-function bindAuthEvents() {
-  root.querySelectorAll('[data-authview]').forEach((btn) =>
-    btn.addEventListener('click', () => setState({ view: btn.dataset.authview, notice: '' })));
-
-  const submit = root.querySelector('#authSubmit');
-  if (submit) {
-    submit.addEventListener('click', () => {
-      const email = root.querySelector('#email')?.value.trim();
-      const password = root.querySelector('#password')?.value || '';
-      if (state.view === 'login') return login(email, password);
-      if (state.view === 'register') {
-        const fullName = root.querySelector('#fullName')?.value.trim();
-        const phone = root.querySelector('#phone')?.value.trim();
-        const confirmPassword = root.querySelector('#confirmPassword')?.value || '';
-        return register(fullName, phone, email, password, confirmPassword);
-      }
-      if (state.view === 'forgot') return forgotPassword(email);
-    });
-  }
-}
-
-function bindGlobalEvents() {
-  root.querySelectorAll('[data-nav]').forEach((btn) => btn.addEventListener('click', () => go(btn.dataset.nav)));
-}
-
-function renderView() {
-  switch (state.view) {
-    case 'home': return renderHome();
-    case 'services': return renderServices();
-    case 'history': return renderHistory();
-    case 'profile': return renderProfile();
-    case 'fund': return renderFund();
-    case 'data': return renderDataForm();
-    case 'airtime': return renderAirtimeForm();
-    case 'tv': return renderTvForm();
-    case 'electricity': return renderElecForm();
-    case 'withdrawal': return renderWithdrawal();
-    case 'airtime-cash': return renderAirtimeCash();
-    case 'referral': return renderReferral();
-    case 'customer-care': return renderCustomerCare();
-    case 'edu-pin': return renderEduForm();
-    default: return renderHome();
-  }
-}
-
-function renderHome() {
-  const quick = [...services, ...moreServices.filter((s) => s.key === 'edu-pin' || s.key === 'referral' || s.key === 'airtime-cash')];
-
-  return `
-    <div class="welcome">
-      <div><span>Welcome, ${state.name} 👋</span><h2>ALFARUQ DATA SERVICE</h2></div>
-      <div class="mini-avatar">${(state.name || 'U')[0].toUpperCase()}</div>
-    </div>
-    <section class="balance-card">
-      <div class="balance-top"><span>Wallet Balance</span><button data-toggle-balance>${icon(state.showBalance ? 'eye' : 'eyeOff', 18)}</button></div>
-      <strong>${state.showBalance ? money(state.balance) : '₦ ••••••'}</strong>
-      <div class="balance-actions">
-        <button data-nav="fund">${icon('plus', 16)} Fund Wallet</button>
-        <button data-nav="withdrawal">${icon('banknote', 16)} Withdraw</button>
-      </div>
-    </section>
-    ${state.notice ? `<div class="notice">${state.notice}</div>` : ''}
-    <div class="section-head"><h3>Quick Services</h3><button data-nav="services">View all ${icon('arrowRight', 16)}</button></div>
-    <div class="service-grid">
-      ${quick.map((s) => `<button class="service-tile ${s.tone}" data-nav="${s.key}">${icon(s.ic, 25)}<b>${s.title}</b><small>${s.desc}</small></button>`).join('')}
-    </div>
-    <div class="trust">${icon('shield', 22)}<div><b>Built for secure digital services</b><p>All purchases are verified server-side before your wallet is charged.</p></div></div>
-  `;
-}
-
-function renderServices() {
-  const all = [...services, ...moreServices];
-  return `
-    ${pageHead('All Services')}
-    <div class="service-list">
-      ${all.map((s) => `<button class="list-card" data-nav="${s.key}"><div class="list-icon ${s.tone}">${icon(s.ic, 18)}</div><div><b>${s.title}</b><small>${s.desc}</small></div>${icon('chevron', 18)}</button>`).join('')}
-    </div>
-  `;
-}
-
-function pageHead(title) {
-  return `<div class="page-head"><button class="icon-btn" data-nav="home">${icon('arrowLeft', 20)}</button><h2>${title}</h2></div>`;
-}
-
-let historyRows = null;
-
-function renderHistory() {
-  if (historyRows === null) {
-    sb.from('transactions').select('id,type,amount,status,created_at').order('created_at', { ascending: false }).limit(50)
-      .then(({ data }) => { historyRows = data || []; render(); });
-    return `${pageHead('Transaction History')}<div class="empty"><h3>Loading history...</h3></div>`;
-  }
-  if (historyRows.length === 0) {
-    return `${pageHead('Transaction History')}<div class="empty">${icon('receipt', 46)}<h3>No transactions yet</h3><p>Your purchases will show up here.</p></div>`;
-  }
-  return `
-    ${pageHead('Transaction History')}
-    <div class="service-list">
-      ${historyRows.map((r) => `<div class="list-card"><div class="list-icon green">${icon('receipt', 18)}</div><div><b>${String(r.type).replace(/_/g, ' ')}</b><small>Amount: ${Number(r.amount).toLocaleString('en-NG')} • ${r.status}</small><small>${new Date(r.created_at).toLocaleString('en-NG')}</small></div></div>`).join('')}
-    </div>
-  `;
-}
-
-function renderProfile() {
-  return `
-    ${pageHead('Profile')}
-    <div class="list-card"><div class="list-icon green">${icon('user', 18)}</div><div><b>${state.name}</b><small>${state.user?.email || ''}</small></div></div>
-    <button class="primary wide" style="margin-top:16px;background:#c0392b" id="logoutBtn">Log out</button>
-  `;
-}
-
-function renderFund() {
-  return `
-    ${pageHead('Fund Wallet')}
-    <label class="field"><span>Amount (₦)</span><div>${icon('banknote', 18)}<input id="fundAmount" type="number" placeholder="e.g. 1000" /></div></label>
-    ${state.notice ? `<div class="notice">${state.notice}</div>` : ''}
-    <button class="primary wide" id="fundBtn" ${state.loading ? 'disabled' : ''}>${state.loading ? 'Please wait...' : 'Proceed to Payment'}</button>
-    <button class="primary wide" id="refreshBalanceBtn" style="background:#1f6fdb;margin-top:10px;">Refresh balance</button>
-  `;
-}
-
-// ---- Data ----
-function renderDataForm() {
-  const dp = state.dp;
-  if (dp.done) return successScreen('Buy Data', `${dp.selectedPlan?.name} sent to ${dp.phone}.`);
-
-  const networkOptions = uniqueNetworkNames();
-  const typeOptions = dataTypesForNetwork();
-
-  return `
-    ${pageHead('Buy Data')}
-    <label class="field"><span>Phone Number</span><div>${icon('phone', 18)}<input id="dpPhone" type="tel" placeholder="08012345678" value="${dp.phone}" /></div></label>
-    <label class="field"><span>Choose provider</span>
-      <select id="dpNetwork" ${dp.loadingNetworks ? 'disabled' : ''}>
-        <option value="">${dp.loadingNetworks ? 'Loading...' : 'Select provider'}</option>
-        ${networkOptions.map((n) => `<option value="${n}" ${dp.selectedNetwork === n ? 'selected' : ''}>${n.toUpperCase()}</option>`).join('')}
-      </select>
-    </label>
-    <label class="field"><span>Select plan type</span>
-      <select id="dpType" ${!dp.selectedNetwork ? 'disabled' : ''}>
-        <option value="">${dp.selectedNetwork ? 'Select plan type' : 'Choose provider first'}</option>
-        ${typeOptions.map((t) => `<option value="${t}" ${dp.selectedDataType === t ? 'selected' : ''}>${t.toUpperCase()}</option>`).join('')}
-      </select>
-    </label>
-    <label class="field"><span>Select plan</span>
-      <select id="dpPlan" ${!dp.selectedServiceId || dp.loadingPlans ? 'disabled' : ''}>
-        <option value="">${dp.loadingPlans ? 'Loading plans...' : !dp.selectedServiceId ? 'Select plan type first' : 'Select plan'}</option>
-        ${dp.plans.map((p) => `<option value="${p.code}" ${dp.selectedPlan?.code === String(p.code) ? 'selected' : ''}>${p.name} — ${money(p.price)}</option>`).join('')}
-      </select>
-      ${dp.planNotice ? `<div class="notice">${dp.planNotice}</div>` : ''}
-    </label>
-    <label class="field"><span>Amount / Package</span><div>${icon('wifi', 18)}<input type="text" readonly value="${dp.selectedPlan ? money(dp.selectedPlan.price) : '₦0.00'}" /></div></label>
-    <label class="field"><span>Payment PIN</span><div>${icon('shield', 18)}<input id="dpPin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN" value="${dp.pin}" /></div></label>
-    ${dp.notice ? `<div class="notice">${dp.notice}</div>` : ''}
-    <button class="primary wide" id="dpSubmit" ${dp.submitting ? 'disabled' : ''}>${dp.submitting ? 'Processing...' : 'Continue'}</button>
-  `;
-}
-
-// ---- Airtime ----
-function renderAirtimeForm() {
-  const at = state.at;
-  if (at.done) return successScreen('Airtime', `${money(at.amount)} airtime sent to ${at.phone}.`);
-
-  const networkOptions = [...new Set(at.networks.map((n) => n.network_name))];
-
-  return `
-    ${pageHead('Buy Airtime')}
-    <label class="field"><span>Phone Number</span><div>${icon('phone', 18)}<input id="atPhone" type="tel" placeholder="08012345678" value="${at.phone}" /></div></label>
-    <label class="field"><span>Choose provider</span>
-      <select id="atNetwork" ${at.loadingNetworks ? 'disabled' : ''}>
-        <option value="">${at.loadingNetworks ? 'Loading...' : 'Select provider'}</option>
-        ${networkOptions.map((n) => `<option value="${n}" ${at.selectedNetwork === n ? 'selected' : ''}>${n.toUpperCase()}</option>`).join('')}
-      </select>
-    </label>
-    <label class="field"><span>Amount (₦)</span><div>${icon('banknote', 18)}<input id="atAmount" type="number" placeholder="e.g. 500" value="${at.amount}" /></div></label>
-    <label class="field"><span>Payment PIN</span><div>${icon('shield', 18)}<input id="atPin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN" value="${at.pin}" /></div></label>
-    ${at.notice ? `<div class="notice">${at.notice}</div>` : ''}
-    <button class="primary wide" id="atSubmit" ${at.submitting ? 'disabled' : ''}>${at.submitting ? 'Processing...' : 'Continue'}</button>
-  `;
-}
-
-// ---- TV ----
-function renderTvForm() {
-  const tv = state.tv;
-  if (tv.done) return successScreen('TV Subscription', `${tv.selectedPlan?.name} activated for smartcard ${tv.smartcard}.`);
-
-  const providerOptions = [...new Set(tv.providers.map((n) => n.network_name))];
-
-  return `
-    ${pageHead('TV Subscription')}
-    <label class="field"><span>Choose provider</span>
-      <select id="tvProvider" ${tv.loadingProviders ? 'disabled' : ''}>
-        <option value="">${tv.loadingProviders ? 'Loading...' : 'Select provider'}</option>
-        ${providerOptions.map((n) => `<option value="${n}" ${tv.selectedProvider === n ? 'selected' : ''}>${n.toUpperCase()}</option>`).join('')}
-      </select>
-    </label>
-    <label class="field"><span>Smartcard / IUC Number</span><div>${icon('tv', 18)}<input id="tvSmartcard" type="text" placeholder="1234567890" value="${tv.smartcard}" /></div></label>
-    <label class="field"><span>Phone Number</span><div>${icon('phone', 18)}<input id="tvPhone" type="tel" placeholder="08012345678" value="${tv.phone}" /></div></label>
-    ${!tv.verified ? `
-      ${tv.notice ? `<div class="notice">${tv.notice}</div>` : ''}
-      <button class="primary wide" id="tvVerifyBtn" ${tv.verifying ? 'disabled' : ''}>${tv.verifying ? 'Verifying...' : 'Verify Smartcard'}</button>
-    ` : `
-      <div class="notice" style="background:#e8f5ee;border-color:#bfe6cf;color:#1a6b3f;">Verified: ${tv.verified.smartcard_name}</div>
-      <label class="field"><span>Select plan</span>
-        <select id="tvPlan">
-          <option value="">Select plan</option>
-          ${(tv.verified.cable_plans || []).map((p) => `<option value="${p.code}" ${tv.selectedPlan?.code === p.code ? 'selected' : ''}>${p.name} — ${money(p.price)}</option>`).join('')}
-        </select>
-      </label>
-      <label class="field"><span>Payment PIN</span><div>${icon('shield', 18)}<input id="tvPin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN" value="${tv.pin}" /></div></label>
-      ${tv.notice ? `<div class="notice">${tv.notice}</div>` : ''}
-      <button class="primary wide" id="tvSubmit" ${tv.submitting ? 'disabled' : ''}>${tv.submitting ? 'Processing...' : 'Continue'}</button>
-    `}
-  `;
-}
-
-// ---- Electricity ----
-function renderElecForm() {
-  const el = state.elec;
-  if (el.done) return successScreen('Electricity', `Token: ${el.verified?.token || 'sent via SMS'} — meter ${el.meterNo}.`);
-
-  const discoOptions = [...new Set(el.discos.map((n) => n.network_name))];
-
-  return `
-    ${pageHead('Electricity / Bills')}
-    <label class="field"><span>Choose provider (Disco)</span>
-      <select id="elDisco" ${el.loadingDiscos ? 'disabled' : ''}>
-        <option value="">${el.loadingDiscos ? 'Loading...' : 'Select disco'}</option>
-        ${discoOptions.map((n) => `<option value="${n}" ${el.selectedDisco === n ? 'selected' : ''}>${n.toUpperCase()}</option>`).join('')}
-      </select>
-    </label>
-    <label class="field"><span>Meter Number</span><div>${icon('zap', 18)}<input id="elMeter" type="text" placeholder="1234567890" value="${el.meterNo}" /></div></label>
-    ${!el.verified ? `
-      ${el.notice ? `<div class="notice">${el.notice}</div>` : ''}
-      <button class="primary wide" id="elVerifyBtn" ${el.verifying ? 'disabled' : ''}>${el.verifying ? 'Verifying...' : 'Verify Meter'}</button>
-    ` : `
-      <div class="notice" style="background:#e8f5ee;border-color:#bfe6cf;color:#1a6b3f;">Verified: ${el.verified.customer_name || el.verified.provider_message}</div>
-      <label class="field"><span>Phone Number</span><div>${icon('phone', 18)}<input id="elPhone" type="tel" placeholder="08012345678" value="${el.phone}" /></div></label>
-      <label class="field"><span>Amount (₦)</span><div>${icon('banknote', 18)}<input id="elAmount" type="number" placeholder="e.g. 2000" value="${el.amount}" /></div></label>
-      <label class="field"><span>Payment PIN</span><div>${icon('shield', 18)}<input id="elPin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN" value="${el.pin}" /></div></label>
-      ${el.notice ? `<div class="notice">${el.notice}</div>` : ''}
-      <button class="primary wide" id="elSubmit" ${el.submitting ? 'disabled' : ''}>${el.submitting ? 'Processing...' : 'Continue'}</button>
-    `}
-  `;
-}
-
-// ---- Withdrawal ----
-function renderWithdrawal() {
-  const wd = state.wd;
-  if (wd.done) return successScreen('Withdrawal Requested', 'Your withdrawal is pending review and will be processed within 24 hours.');
-
-  return `
-    ${pageHead('Withdraw to Bank')}
-    <label class="field"><span>Amount (₦)</span><div>${icon('banknote', 18)}<input id="wdAmount" type="number" placeholder="e.g. 5000" value="${wd.amount}" /></div></label>
-    <label class="field"><span>Bank Name</span><div>${icon('banknote', 18)}<input id="wdBank" type="text" placeholder="e.g. GTBank" value="${wd.bankName}" /></div></label>
-    <label class="field"><span>Account Number</span><div>${icon('banknote', 18)}<input id="wdAccNum" type="text" placeholder="0123456789" value="${wd.accountNumber}" /></div></label>
-    <label class="field"><span>Account Name</span><div>${icon('user', 18)}<input id="wdAccName" type="text" placeholder="As it appears on your account" value="${wd.accountName}" /></div></label>
-    <label class="field"><span>Payment PIN</span><div>${icon('shield', 18)}<input id="wdPin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN" value="${wd.pin}" /></div></label>
-    ${wd.notice ? `<div class="notice">${wd.notice}</div>` : ''}
-    <button class="primary wide" id="wdSubmit" ${wd.submitting ? 'disabled' : ''}>${wd.submitting ? 'Submitting...' : 'Request Withdrawal'}</button>
-    <p class="legal">Withdrawals are reviewed and paid out manually within 24 hours for your security.</p>
-  `;
-}
-
-// ---- Airtime to Cash ----
-function renderAirtimeCash() {
-  const ac = state.ac;
-  if (ac.done) return successScreen('Request Submitted', 'We will confirm your airtime transfer and credit your wallet shortly.');
-
-  return `
-    ${pageHead('Airtime to Cash')}
-    <p style="color:var(--muted);font-size:13px;margin-top:-6px;">Transfer airtime to our number, then submit the details below. Your wallet is credited after we confirm receipt.</p>
-    <label class="field"><span>Network</span>
-      <select id="acNetwork">
-        <option value="">Select network</option>
-        <option ${ac.network === 'MTN' ? 'selected' : ''}>MTN</option>
-        <option ${ac.network === 'Airtel' ? 'selected' : ''}>Airtel</option>
-        <option ${ac.network === 'Glo' ? 'selected' : ''}>Glo</option>
-        <option ${ac.network === '9mobile' ? 'selected' : ''}>9mobile</option>
-      </select>
-    </label>
-    <label class="field"><span>Amount sent (₦)</span><div>${icon('banknote', 18)}<input id="acAmount" type="number" placeholder="e.g. 1000" value="${ac.amount}" /></div></label>
-    <label class="field"><span>The phone number you sent from</span><div>${icon('phone', 18)}<input id="acSender" type="tel" placeholder="08012345678" value="${ac.senderNumber}" /></div></label>
-    ${ac.notice ? `<div class="notice">${ac.notice}</div>` : ''}
-    <button class="primary wide" id="acSubmit" ${ac.submitting ? 'disabled' : ''}>${ac.submitting ? 'Submitting...' : 'Submit Request'}</button>
-  `;
-}
-
-// ---- Referral ----
-function renderReferral() {
-  const link = state.referralCode ? `${window.location.origin}${window.location.pathname}?ref=${state.referralCode}` : '';
-
-  return `
-    ${pageHead('My Referral')}
-    <div class="balance-card" style="background:linear-gradient(135deg,#7b3fe4,#4c1fa3);">
-      <div class="balance-top"><span>Your referral code</span></div>
-      <strong style="font-size:24px;">${state.referralCode || '...'}</strong>
-    </div>
-    <p style="color:var(--muted);font-size:13px;">Share your link below. When someone signs up and completes their first purchase, you earn a ₦100 bonus automatically.</p>
-    <label class="field"><span>Your referral link</span><div><input id="refLink" type="text" readonly value="${link}" /></div></label>
-    <button class="primary wide" id="refCopyBtn">${icon('copy', 16)} Copy Link</button>
-  `;
-}
-
-// ---- Customer Care ----
-function renderCustomerCare() {
-  return `
-    ${pageHead('Customer Care')}
-    <p style="color:var(--muted);font-size:13px;">Chat with us directly on WhatsApp for any issue with your account or a transaction.</p>
-    <a class="list-card" href="https://wa.me/2348066071218" target="_blank" style="text-decoration:none;color:inherit;">
-      <div class="list-icon green">${icon('whatsapp', 18)}</div>
-      <div><b>Support Line 1</b><small>0806 607 1218</small></div>
-      ${icon('chevron', 18)}
-    </a>
-    <a class="list-card" href="https://wa.me/2349019624093" target="_blank" style="text-decoration:none;color:inherit;">
-      <div class="list-icon green">${icon('whatsapp', 18)}</div>
-      <div><b>Support Line 2</b><small>0901 962 4093</small></div>
-      ${icon('chevron', 18)}
-    </a>
-  `;
-}
-
-function renderEduForm() {
-  const edu = state.edu;
-  if (edu.done) return successScreen('Edu PIN', `${edu.quantity} × ${edu.selectedType.toUpperCase()} PIN sent to ${edu.phone}. Check History for your PIN(s).`);
-
-  const typeOptions = [...new Set(edu.types.map((n) => n.network_name))];
-  const total = edu.unitPrice ? edu.unitPrice * Number(edu.quantity || 1) : null;
-
-  return `
-    ${pageHead('Edu PIN')}
-    <label class="field"><span>Exam type</span>
-      <select id="eduType" ${edu.loadingTypes ? 'disabled' : ''}>
-        <option value="">${edu.loadingTypes ? 'Loading...' : 'Select exam type'}</option>
-        ${typeOptions.map((n) => `<option value="${n}" ${edu.selectedType === n ? 'selected' : ''}>${n.toUpperCase()}</option>`).join('')}
-      </select>
-    </label>
-    <label class="field"><span>Quantity</span><div>${icon('grad', 18)}<input id="eduQty" type="number" min="1" value="${edu.quantity}" /></div></label>
-    <label class="field"><span>Price per PIN</span><div>${icon('banknote', 18)}<input type="text" readonly value="${edu.loadingPrice ? 'Loading...' : edu.unitPrice ? money(edu.unitPrice) : '₦0.00'}" /></div></label>
-    <label class="field"><span>Total</span><div>${icon('banknote', 18)}<input type="text" readonly value="${total ? money(total) : '₦0.00'}" /></div></label>
-    <label class="field"><span>Phone Number</span><div>${icon('phone', 18)}<input id="eduPhone" type="tel" placeholder="08012345678" value="${edu.phone}" /></div></label>
-    <label class="field"><span>Payment PIN</span><div>${icon('shield', 18)}<input id="eduPin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN" value="${edu.pin}" /></div></label>
-    ${edu.notice ? `<div class="notice">${edu.notice}</div>` : ''}
-    <button class="primary wide" id="eduSubmit" ${edu.submitting ? 'disabled' : ''}>${edu.submitting ? 'Processing...' : 'Continue'}</button>
-  `;
-}
-
-function successScreen(title, message) {
-  return `
-    ${pageHead(title)}
-    <div class="empty">${icon('shield', 46)}<h3>Successful</h3><p>${message}</p><button class="primary wide" data-nav="home">Back to Home</button></div>
-  `;
-}
-
-// ---------- Event binding ----------
-function bindViewEvents() {
-  if (state.view === 'home') {
-    root.querySelector('[data-toggle-balance]')?.addEventListener('click', () => setState({ showBalance: !state.showBalance }));
-  }
-
-  if (state.view === 'profile') {
-    root.querySelector('#logoutBtn')?.addEventListener('click', logout);
-  }
-
-  if (state.view === 'fund') {
-    root.querySelector('#fundBtn')?.addEventListener('click', () => startFunding(root.querySelector('#fundAmount')?.value));
-    root.querySelector('#refreshBalanceBtn')?.addEventListener('click', loadProfile);
-  }
-
-  if (state.view === 'data') {
-    root.querySelector('#dpPhone')?.addEventListener('input', (e) => (state.dp.phone = e.target.value));
-    root.querySelector('#dpPin')?.addEventListener('input', (e) => (state.dp.pin = e.target.value.replace(/\D/g, '')));
-    root.querySelector('#dpNetwork')?.addEventListener('change', (e) => onPickNetwork(e.target.value));
-    root.querySelector('#dpType')?.addEventListener('change', (e) => onPickDataType(e.target.value));
-    root.querySelector('#dpPlan')?.addEventListener('change', (e) => onPickPlan(e.target.value));
-    root.querySelector('#dpSubmit')?.addEventListener('click', submitDataPurchase);
-  }
-
-  if (state.view === 'airtime') {
-    root.querySelector('#atPhone')?.addEventListener('input', (e) => (state.at.phone = e.target.value));
-    root.querySelector('#atAmount')?.addEventListener('input', (e) => (state.at.amount = e.target.value));
-    root.querySelector('#atPin')?.addEventListener('input', (e) => (state.at.pin = e.target.value.replace(/\D/g, '')));
-    root.querySelector('#atNetwork')?.addEventListener('change', (e) => onPickAtNetwork(e.target.value));
-    root.querySelector('#atSubmit')?.addEventListener('click', submitAirtimePurchase);
-  }
-
-  if (state.view === 'tv') {
-    root.querySelector('#tvProvider')?.addEventListener('change', (e) => onPickTvProvider(e.target.value));
-    root.querySelector('#tvSmartcard')?.addEventListener('input', (e) => (state.tv.smartcard = e.target.value));
-    root.querySelector('#tvPhone')?.addEventListener('input', (e) => (state.tv.phone = e.target.value));
-    root.querySelector('#tvVerifyBtn')?.addEventListener('click', verifySmartcard);
-    root.querySelector('#tvPlan')?.addEventListener('change', (e) => onPickTvPlan(e.target.value));
-    root.querySelector('#tvPin')?.addEventListener('input', (e) => (state.tv.pin = e.target.value.replace(/\D/g, '')));
-    root.querySelector('#tvSubmit')?.addEventListener('click', submitTvPurchase);
-  }
-
-  if (state.view === 'electricity') {
-    root.querySelector('#elDisco')?.addEventListener('change', (e) => onPickDisco(e.target.value));
-    root.querySelector('#elMeter')?.addEventListener('input', (e) => (state.elec.meterNo = e.target.value));
-    root.querySelector('#elVerifyBtn')?.addEventListener('click', verifyMeter);
-    root.querySelector('#elPhone')?.addEventListener('input', (e) => (state.elec.phone = e.target.value));
-    root.querySelector('#elAmount')?.addEventListener('input', (e) => (state.elec.amount = e.target.value));
-    root.querySelector('#elPin')?.addEventListener('input', (e) => (state.elec.pin = e.target.value.replace(/\D/g, '')));
-    root.querySelector('#elSubmit')?.addEventListener('click', submitElectricityPurchase);
-  }
-
-  if (state.view === 'withdrawal') {
-    root.querySelector('#wdAmount')?.addEventListener('input', (e) => (state.wd.amount = e.target.value));
-    root.querySelector('#wdBank')?.addEventListener('input', (e) => (state.wd.bankName = e.target.value));
-    root.querySelector('#wdAccNum')?.addEventListener('input', (e) => (state.wd.accountNumber = e.target.value));
-    root.querySelector('#wdAccName')?.addEventListener('input', (e) => (state.wd.accountName = e.target.value));
-    root.querySelector('#wdPin')?.addEventListener('input', (e) => (state.wd.pin = e.target.value.replace(/\D/g, '')));
-    root.querySelector('#wdSubmit')?.addEventListener('click', submitWithdrawal);
-  }
-
-  if (state.view === 'airtime-cash') {
-    root.querySelector('#acNetwork')?.addEventListener('change', (e) => (state.ac.network = e.target.value));
-    root.querySelector('#acAmount')?.addEventListener('input', (e) => (state.ac.amount = e.target.value));
-    root.querySelector('#acSender')?.addEventListener('input', (e) => (state.ac.senderNumber = e.target.value));
-    root.querySelector('#acSubmit')?.addEventListener('click', submitAirtimeCash);
-  }
-
-  if (state.view === 'edu-pin') {
-    root.querySelector('#eduType')?.addEventListener('change', (e) => onPickEduType(e.target.value));
-    root.querySelector('#eduQty')?.addEventListener('input', (e) => setEdu({ quantity: e.target.value }));
-    root.querySelector('#eduPhone')?.addEventListener('input', (e) => (state.edu.phone = e.target.value));
-    root.querySelector('#eduPin')?.addEventListener('input', (e) => (state.edu.pin = e.target.value.replace(/\D/g, '')));
-    root.querySelector('#eduSubmit')?.addEventListener('click', submitEduPurchase);
-  }
-
-  if (state.view === 'referral') {
-    root.querySelector('#refCopyBtn')?.addEventListener('click', () => {
-      const input = root.querySelector('#refLink');
-      input.select();
-      navigator.clipboard?.writeText(input.value);
-      setState({ notice: 'Referral link copied!' });
-    });
-  }
-}
-
-// ---------- Boot ----------
-initAuth();
+  con
