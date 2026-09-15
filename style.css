@@ -1,0 +1,204 @@
+:root {
+  --primary: #3C3489;
+  --primary-dark: #2E2870;
+  --primary-light: #7F77DD;
+  --primary-bg: #EEEDFE;
+  --accent-gold: #C9A227;
+  --accent-gold-dark: #B8931F;
+  --accent-gold-text: #3C1F02;
+  --bg-page: #FDFCF8;
+  --text-dark: #1A1730;
+  --text-muted: #6B6890;
+  --success: #1D9E75;
+  --danger: #E24B4A;
+  --border: #E4E1F7;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg-page);
+  color: var(--text-dark);
+  font-family: -apple-system, Roboto, "Segoe UI", sans-serif;
+  height: 100%;
+}
+
+#app { max-width: 480px; margin: 0 auto; min-height: 100vh; padding-bottom: 78px; }
+
+/* ---------- Top bar ---------- */
+.topbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; background: var(--bg-page);
+}
+.topbar .back-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 1px solid var(--border); background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; color: var(--primary); cursor: pointer;
+}
+.topbar h1 { font-size: 17px; margin: 0; flex: 1; text-align: center; }
+.topbar .spacer { width: 36px; }
+
+/* ---------- Greeting header (home) ---------- */
+.greeting { display: flex; align-items: center; justify-content: space-between; padding: 16px; }
+.greeting .who { display: flex; align-items: center; gap: 10px; }
+.avatar {
+  width: 42px; height: 42px; border-radius: 50%;
+  background: var(--primary-bg); color: var(--primary);
+  display: flex; align-items: center; justify-content: center; font-weight: 600;
+}
+.greeting .sub { font-size: 13px; color: var(--text-muted); }
+.greeting .name { font-size: 17px; font-weight: 600; }
+.bell {
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center; color: var(--primary);
+}
+
+/* ---------- Wallet card ---------- */
+.wallet-card {
+  margin: 0 16px 16px; padding: 20px;
+  background: var(--primary); border-radius: 16px; color: #fff;
+}
+.wallet-card .row { display: flex; align-items: center; justify-content: space-between; }
+.wallet-card .label { font-size: 13px; color: var(--primary-light); display: flex; align-items: center; gap: 6px; }
+.wallet-card .balance { font-size: 30px; font-weight: 600; margin: 8px 0 16px; }
+.wallet-card hr { border: none; border-top: 1px solid rgba(255,255,255,0.2); margin: 12px 0; }
+.wallet-card .actions { display: flex; gap: 10px; }
+.wallet-card .bonus { font-size: 13px; color: var(--primary-light); }
+
+.btn { border: none; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 500; cursor: pointer; }
+.btn-block { width: 100%; display: block; text-align: center; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-gold { background: var(--accent-gold); color: var(--accent-gold-text); }
+.btn-outline { background: transparent; border: 1px solid var(--primary-light); color: #fff; }
+.btn-outline-dark { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
+.btn:disabled { opacity: 0.5; }
+
+/* ---------- Virtual account ---------- */
+.section-title { padding: 0 16px; font-size: 15px; font-weight: 600; margin: 16px 0 8px; display: flex; justify-content: space-between; align-items: center; }
+.section-title a { font-size: 13px; color: var(--primary); font-weight: 500; }
+.va-card {
+  margin: 0 16px; padding: 16px; background: var(--primary-bg);
+  border-radius: 14px; display: flex; align-items: center; justify-content: space-between;
+}
+.va-card .bank { font-size: 13px; color: var(--text-muted); }
+.va-card .num { font-size: 17px; font-weight: 600; }
+.va-card .fee { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* ---------- Quick services grid ---------- */
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 0 16px; margin-top: 8px; }
+.service-tile {
+  background: #fff; border: 1px solid var(--border); border-radius: 14px;
+  padding: 16px 6px; text-align: center; cursor: pointer;
+}
+.service-tile .ic {
+  width: 40px; height: 40px; margin: 0 auto 8px; border-radius: 10px;
+  background: var(--primary-bg); color: var(--primary);
+  display: flex; align-items: center; justify-content: center; font-size: 18px;
+}
+.service-tile span { font-size: 12.5px; font-weight: 500; }
+
+/* ---------- Cards / lists ---------- */
+.card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin: 0 16px 12px; }
+.list-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.list-item:last-child { border-bottom: none; }
+.list-item .l-title { font-weight: 500; font-size: 14px; }
+.list-item .l-sub { font-size: 12px; color: var(--text-muted); }
+.list-item .l-amount { font-weight: 600; font-size: 14px; }
+.amount-in { color: var(--success); }
+.amount-out { color: var(--text-dark); }
+
+.empty-state { text-align: center; padding: 60px 24px; color: var(--text-muted); }
+.empty-state .ic { font-size: 40px; margin-bottom: 10px; }
+
+/* ---------- Forms ---------- */
+.form-group { margin: 0 16px 14px; }
+.form-group label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+input, select, textarea {
+  width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px;
+  font-size: 15px; background: #fff; color: var(--text-dark);
+}
+input:focus, select:focus { outline: none; border-color: var(--primary-light); }
+.choice-list .list-item { background: #fff; }
+.choice-list .list-item.selected { background: var(--primary-bg); }
+
+/* ---------- Badges / status ---------- */
+.badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+.badge-success { background: #E5F7F1; color: var(--success); }
+.badge-pending { background: #FBF2DC; color: var(--accent-gold-dark); }
+.badge-failed { background: #FCEAEA; color: var(--danger); }
+
+/* ---------- Bottom nav ---------- */
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  max-width: 480px; margin: 0 auto;
+  background: #fff; border-top: 1px solid var(--border);
+  display: flex; padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+}
+.bottom-nav .nav-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  font-size: 11px; color: var(--text-muted); cursor: pointer;
+}
+.bottom-nav .nav-item .ic { font-size: 19px; }
+.bottom-nav .nav-item.active { color: var(--primary); font-weight: 600; }
+
+/* ---------- Floating WhatsApp ---------- */
+.fab-whatsapp {
+  position: fixed; right: 18px; bottom: 88px;
+  width: 52px; height: 52px; border-radius: 50%;
+  background: #25D366; color: #fff; font-size: 24px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2); z-index: 20;
+}
+
+/* ---------- Modal (receipt etc) ---------- */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(26,23,48,0.5);
+  display: flex; align-items: flex-end; z-index: 50;
+}
+.modal-sheet {
+  background: #fff; width: 100%; max-width: 480px; margin: 0 auto;
+  border-radius: 20px 20px 0 0; padding: 20px; max-height: 88vh; overflow-y: auto;
+}
+.modal-sheet .close-x { text-align: right; color: var(--text-muted); font-size: 20px; cursor: pointer; }
+.receipt-header { text-align: center; margin: 8px 0 20px; }
+.receipt-header .stamp {
+  width: 56px; height: 56px; border-radius: 50%; background: #E5F7F1; color: var(--success);
+  display: flex; align-items: center; justify-content: center; font-size: 26px; margin: 0 auto 10px;
+}
+.receipt-header .amt { font-size: 24px; font-weight: 700; }
+.receipt-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed var(--border); font-size: 14px; }
+.receipt-row .k { color: var(--text-muted); }
+
+/* ---------- Method choice tiles (NIN/BVN) ---------- */
+.method-tile {
+  margin: 0 16px 12px; padding: 16px; border: 1px solid var(--border); border-radius: 14px;
+  display: flex; align-items: center; gap: 14px; cursor: pointer;
+}
+.method-tile .num {
+  width: 30px; height: 30px; border-radius: 50%; background: var(--primary-bg); color: var(--primary);
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px;
+}
+.method-tile .t { font-weight: 600; font-size: 14px; }
+.method-tile .d { font-size: 12px; color: var(--text-muted); }
+
+/* ---------- Toast ---------- */
+.toast {
+  position: fixed; bottom: 90px; left: 16px; right: 16px; max-width: 448px; margin: 0 auto;
+  background: var(--text-dark); color: #fff; padding: 12px 16px; border-radius: 10px;
+  font-size: 13px; text-align: center; z-index: 60;
+}
+
+.center-pad { padding: 40px 24px; text-align: center; }
+.logo-badge {
+  width: 72px; height: 72px; border-radius: 18px; background: var(--primary);
+  color: #fff; font-size: 28px; font-weight: 700; display: flex;
+  align-items: center; justify-content: center; margin: 0 auto 16px;
+}
+.muted-link { text-align: center; font-size: 13px; color: var(--text-muted); margin-top: 14px; }
+.muted-link a { color: var(--primary); font-weight: 500; text-decoration: none; }
+.error-text { color: var(--danger); font-size: 13px; margin: 0 16px 10px; }
